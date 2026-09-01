@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>時數累積小工具</title>
+  <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+  <style>
+    :root{
+      --yellow:#FFF3B0;
+      --yellow-2:#FFE98A;
+      --cream:#FFFBEA;
+      --ink:#292722;
+      --muted:#7D786B;
+      --line:#E7DFAE;
+      --white:#FFFFFF;
+      --danger:#D85C55;
+      --shadow:0 12px 30px rgba(70,58,18,.10);
+      --radius:24px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      color:var(--ink);
+      background:
+        radial-gradient(circle at 18px 18px, rgba(215,190,62,.22) 2px, transparent 2.5px) 0 0/36px 36px,
+        var(--cream);
+      font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+    }
+    button,input{font:inherit}
+    button{cursor:pointer}
+    .app{max-width:1080px;margin:0 auto;padding:28px 18px 60px}
+    header{
+      display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
+      margin-bottom:22px;
+    }
+    .brand h1{margin:0;font-size:clamp(26px,5vw,42px);letter-spacing:.02em}
+    .brand p{margin:8px 0 0;color:var(--muted)}
+    .share-btn{
+      border:2px solid var(--ink);background:var(--yellow-2);color:var(--ink);
+      padding:12px 16px;border-radius:999px;font-weight:800;box-shadow:4px 4px 0 var(--ink);
+      transition:.15s;
+    }
+    .share-btn:hover{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink)}
+    .grid{display:grid;grid-template-columns:1fr 1.45fr;gap:18px}
+    .card{
+      background:rgba(255,255,255,.88);border:2px solid var(--line);
+      border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;
+    }
+    .stats{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .stat{background:var(--yellow);border-radius:18px;padding:16px}
+    .stat .label{font-size:13px;color:#6D654A;font-weight:700}
+    .stat .value{font-size:30px;font-weight:900;margin-top:4px}
+    .progress-wrap{display:flex;align-items:center;gap:18px;margin-top:18px}
+    .ring{
+      width:150px;height:150px;border-radius:50%;display:grid;place-items:center;flex:none;
+      background:conic-gradient(#E7BE35 var(--progress), #F1EEDB 0);
+      position:relative;
+    }
+    .ring::before{content:"";position:absolute;inset:13px;background:white;border-radius:50%}
+    .ring-content{position:relative;text-align:center}
+    .ring-percent{font-size:26px;font-weight:900}
+    .ring-sub{font-size:12px;color:var(--muted)}
+    .goal-copy h2{margin:0 0 6px;font-size:20px}
+    .goal-copy p{margin:0;color:var(--muted);line-height:1.6}
+    form{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+    .field{display:flex;flex-direction:column;gap:6px}
+    .field.full{grid-column:1/-1}
+    label{font-size:13px;font-weight:800}
+    input{
+      width:100%;padding:13px 14px;border:2px solid #E5DDAF;border-radius:14px;
+      background:#FFFDF3;outline:none;
+    }
+    input:focus{border-color:#D7B62D;box-shadow:0 0 0 4px rgba(231,190,53,.18)}
+    .add-btn{
+      grid-column:1/-1;border:0;background:var(--ink);color:white;border-radius:14px;
+      padding:14px;font-weight:900;
+    }
+    .hint{font-size:12px;color:var(--muted);margin-top:9px}
+    .section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .section-title h2{margin:0;font-size:21px}
+    .trend{margin-top:18px}
+    .trend.hidden{display:none}
+    .chart-box{height:240px;position:relative}
+    canvas{width:100%;height:100%;display:block}
+    .months{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:3px}
+    .records{margin-top:18px}
+    .month-group{margin-bottom:18px}
+    .month-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .month-head strong{font-size:17px}
+    .month-total{font-size:13px;color:var(--muted);font-weight:800}
+    .record{
+      display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px dashed #DED5A3;
+    }
+    .record:last-child{border-bottom:0}
+    .date-pill{
+      min-width:54px;text-align:center;background:#FFF5C8;border-radius:12px;padding:8px 6px;
+      font-weight:900;font-size:13px;
+    }
+    .record-main{flex:1;min-width:0}
+    .record-hours{font-weight:900}
+    .record-note{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+    .delete{
+      border:0;background:transparent;color:#A49D89;padding:8px;border-radius:10px;font-size:18px;
+    }
+    .delete:hover{background:#FFF0EE;color:var(--danger)}
+    .empty{padding:30px 8px;text-align:center;color:var(--muted)}
+    .toast{
+      position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
+      background:var(--ink);color:white;padding:11px 16px;border-radius:999px;
+      opacity:0;pointer-events:none;transition:.25s;z-index:10;font-size:14px;font-weight:800;
+    }
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    @media(max-width:760px){
+      .grid{grid-template-columns:1fr}
+      header{align-items:center}
+      .share-btn{padding:10px 13px;font-size:13px}
+      .progress-wrap{justify-content:center}
+      .ring{width:135px;height:135px}
+    }
+    @media(max-width:480px){
+      .app{padding:20px 12px 45px}
+      .card{padding:17px}
+      form{grid-template-columns:1fr}
+      .field.full{grid-column:auto}
+      .stats{gap:8px}
+      .stat .value{font-size:25px}
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div class="brand">
+        <h1>我的時數累積</h1>
+        <p>一步一步，把 320 小時存起來 ✦</p>
+      </div>
+      <button class="share-btn" id="shareBtn">🔗 複製分享連結</button>
+    </header>
+
+    <div class="grid">
+      <section>
+        <div class="card">
+          <div class="stats">
+            <div class="stat">
+              <div class="label">累積總時數</div>
+              <div class="value" id="totalHours">0 小時</div>
+            </div>
+            <div class="stat">
+              <div class="label">本月時數</div>
+              <div class="value" id="monthHours">0 小時</div>
+            </div>
+          </div>
+
+          <div class="progress-wrap">
+            <div class="ring" id="ring">
+              <div class="ring-content">
+                <div class="ring-percent" id="progressPercent">0%</div>
+                <div class="ring-sub">320 小時目標</div>
+              </div>
+            </div>
+            <div class="goal-copy">
+              <h2 id="goalTitle">還差 320 小時</h2>
+              <p id="goalText">持續累積，你會看到進度慢慢長大。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card trend hidden" id="trendCard">
+          <div class="section-title">
+            <h2>每月趨勢</h2>
+            <span class="month-total">至少 2 個月資料後顯示</span>
+          </div>
+          <div class="chart-box"><canvas id="chart"></canvas></div>
+          <div class="months" id="chartMonths"></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="card">
+          <div class="section-title"><h2>＋ 新增紀錄</h2></div>
+          <form id="recordForm">
+            <div class="field">
+              <label for="date">日期</label>
+              <input id="date" type="date" required />
+            </div>
+            <div class="field">
+              <label for="hours">時數</label>
+              <input id="hours" type="number" min="0.1" step="0.1" placeholder="例如 4.5" required />
+            </div>
+            <div class="field full">
+              <label for="note">備註</label>
+              <input id="note" type="text" maxlength="100" placeholder="例如：完成海報設計" />
+            </div>
+            <button class="add-btn" type="submit">加入紀錄</button>
+          </form>
+          <div class="hint">資料會自動儲存在此瀏覽器；分享連結則會把目前資料打包進網址。</div>
+        </div>
+
+        <div class="card records">
+          <div class="section-title">
+            <h2>紀錄</h2>
+            <span class="month-total" id="recordCount">0 筆</span>
+          </div>
+          <div id="recordsList"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const GOAL = 320;
+  const STORAGE_KEY = "study-hours-records-v1";
+  let records = [];
+
+  const $ = id => document.getElementById(id);
+
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  }
+
+  function loadLocal() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+  }
+
+  function cleanRecords(data) {
+    if (!Array.isArray(data)) return [];
+    return data.map(r => ({
+      id: String(r.id || uid()),
+      date: String(r.date || ""),
+      hours: Number(r.hours),
+      note: String(r.note || "")
+    })).filter(r => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && Number.isFinite(r.hours) && r.hours > 0);
+  }
+
+  // Share format:
+  // URL#data=<LZString-compressed Base64-like URI-safe string>
+  function encodeShareData() {
+    const payload = JSON.stringify({ v: 1, goal: GOAL, records });
+    return LZString.compressToEncodedURIComponent(payload);
+  }
+
+  function decodeShareData(value) {
+    try {
+      const json = LZString.decompressFromEncodedURIComponent(value);
+      if (!json) return null;
+      const data = JSON.parse(json);
+      return cleanRecords(data.records);
+    } catch {
+      return null;
+    }
+  }
+
+  function loadFromHash() {
+    const match = location.hash.match(/(?:^|&)data=([^&]*)/);
+    if (!match) return null;
+    return decodeShareData(match[1]);
+  }
+
+  function syncUrl() {
+    // Hash is intentionally updated only when creating a share link,
+    // so normal edits keep localStorage clean and URLs short.
+  }
+
+  function showToast(message) {
+    const t = $("toast");
+    t.textContent = message;
+    t.classList.add("show");
+    clearTimeout(showToast.timer);
+    showToast.timer = setTimeout(() => t.classList.remove("show"), 2200);
+  }
+
+  function formatHours(n) {
+    return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
+  }
+
+  function currentMonthKey() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  }
+
+  function monthLabel(key) {
+    const [y,m] = key.split("-");
+    return `${y} 年 ${Number(m)} 月`;
+  }
+
+  function renderStats() {
+    const total = records.reduce((s,r) => s + r.hours, 0);
+    const current = records.filter(r => r.date.startsWith(currentMonthKey()))
+      .reduce((s,r) => s + r.hours, 0);
+    const percent = Math.min(100, (total / GOAL) * 100);
+
+    $("totalHours").textContent = `${formatHours(total)} 小時`;
+    $("monthHours").textContent = `${formatHours(current)} 小時`;
+    $("progressPercent").textContent = `${Math.round(percent)}%`;
+    $("ring").style.setProperty("--progress", `${percent}%`);
+
+    if (total >= GOAL) {
+      $("goalTitle").textContent = "🎉 已達成 320 小時！";
+      $("goalText").textContent = `超過目標 ${formatHours(total - GOAL)} 小時，做得很好！`;
+    } else {
+      $("goalTitle").textContent = `還差 ${formatHours(GOAL - total)} 小時`;
+      $("goalText").textContent = "持續累積，你會看到進度慢慢長大。";
+    }
+  }
+
+  function renderRecords() {
+    const list = $("recordsList");
+    $("recordCount").textContent = `${records.length} 筆`;
+    if (!records.length) {
+      list.innerHTML = `<div class="empty">目前還沒有紀錄<br>從第一筆時數開始吧 ✦</div>`;
+      return;
+    }
+
+    const groups = {};
+    [...records].sort((a,b) => b.date.localeCompare(a.date)).forEach(r => {
+      const key = r.date.slice(0,7);
+      (groups[key] ||= []).push(r);
+    });
+
+    list.innerHTML = Object.entries(groups).map(([month, items]) => {
+      const total = items.reduce((s,r) => s+r.hours, 0);
+      return `
+        <div class="month-group">
+          <div class="month-head">
+            <strong>${monthLabel(month)}</strong>
+            <span class="month-total">${formatHours(total)} 小時</span>
+          </div>
+          ${items.map(r => `
+            <div class="record">
+              <div class="date-pill">${r.date.slice(5).replace("-","/")}</div>
+              <div class="record-main">
+                <div class="record-hours">${formatHours(r.hours)} 小時</div>
+                <div class="record-note">${escapeHtml(r.note || "無備註")}</div>
+              </div>
+              <button class="delete" data-delete="${r.id}" title="刪除">×</button>
+            </div>
+          `).join("")}
+        </div>`;
+    }).join("");
+
+    list.querySelectorAll("[data-delete]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        records = records.filter(r => r.id !== btn.dataset.delete);
+        save();
+        render();
+      });
+    });
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+    }[c]));
+  }
+
+  function getMonthlyData() {
+    const map = {};
+    records.forEach(r => {
+      const key = r.date.slice(0,7);
+      map[key] = (map[key] || 0) + r.hours;
+    });
+    return Object.entries(map).sort((a,b) => a[0].localeCompare(b[0]));
+  }
+
+  function renderChart() {
+    const data = getMonthlyData();
+    const card = $("trendCard");
+    if (data.length < 2) {
+      card.classList.add("hidden");
+      return;
+    }
+    card.classList.remove("hidden");
+
+    const canvas = $("chart");
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.floor(rect.width*dpr));
+    canvas.height = Math.max(1, Math.floor(rect.height*dpr));
+    const ctx = canvas.getContext("2d");
+    ctx.scale(dpr,dpr);
+
+    const w = rect.width, h = rect.height;
+    const pad = {l:30,r:16,t:18,b:18};
+    const vals = data.map(x => x[1]);
+    const max = Math.max(...vals, 1);
+    const x = i => pad.l + (i * (w-pad.l-pad.r) / Math.max(data.length-1,1));
+    const y = v => h-pad.b - (v/max)*(h-pad.t-pad.b);
+
+    ctx.font = "11px -apple-system, BlinkMacSystemFont, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#9B947F";
+    for(let i=0;i<4;i++){
+      const yy = pad.t + i*(h-pad.t-pad.b)/3;
+      ctx.strokeStyle = "#EEE8C9";
+      ctx.setLineDash([3,5]);
+      ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();
+      ctx.setLineDash([]);
+      const val = max - (max*i/3);
+      ctx.fillText(formatHours(val), pad.l-6, yy+4);
+    }
+
+    ctx.strokeStyle = "#D7B62D";
+    ctx.lineWidth = 4;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    data.forEach((d,i) => i ? ctx.lineTo(x(i),y(d[1])) : ctx.moveTo(x(i),y(d[1])));
+    ctx.stroke();
+
+    data.forEach((d,i) => {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.beginPath();ctx.arc(x(i),y(d[1]),6,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle = "#D7B62D";
+      ctx.beginPath();ctx.arc(x(i),y(d[1]),3.5,0,Math.PI*2);ctx.fill();
+    });
+
+    $("chartMonths").innerHTML = data.map(d => `<span>${d[0].slice(2).replace("-","/")}</span>`).join("");
+  }
+
+  function render() {
+    renderStats();
+    renderRecords();
+    renderChart();
+  }
+
+  $("recordForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const date = $("date").value;
+    const hours = Number($("hours").value);
+    const note = $("note").value.trim();
+    if (!date || !Number.isFinite(hours) || hours <= 0) return;
+
+    records.push({id:uid(), date, hours, note});
+    records.sort((a,b) => b.date.localeCompare(a.date));
+    save();
+    e.target.reset();
+    $("date").value = new Date().toISOString().slice(0,10);
+    render();
+    showToast("已加入紀錄 ✦");
+  });
+
+  $("shareBtn").addEventListener("click", async () => {
+    const encoded = encodeShareData();
+    const url = `${location.href.split("#")[0]}#data=${encoded}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("分享連結已複製！");
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      showToast("分享連結已複製！");
+    }
+  });
+
+  // On first load, shared hash data takes priority over local data.
+  const shared = loadFromHash();
+  records = shared !== null ? shared : cleanRecords(loadLocal());
+  if (shared !== null) save();
+
+  $("date").value = new Date().toISOString().slice(0,10);
+  render();
+  window.addEventListener("resize", renderChart);
+})();
+</script>
+</body>
+</html>

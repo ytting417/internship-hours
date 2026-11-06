@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>實習時數｜安全資料救援</title>
+<script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif;color:#292722;background:#fffbea}
+*{box-sizing:border-box}body{margin:0;padding:20px}main{max-width:720px;margin:auto}h1{font-size:28px}p{line-height:1.65}.panel{background:white;border:2px solid #e7dfae;border-radius:19px;padding:18px;margin:14px 0}button,.link{background:#ffe98a;color:#292722;border:2px solid #292722;border-radius:11px;padding:12px 15px;font-size:15px;font-weight:700;display:inline-block;text-decoration:none;margin:5px 5px 5px 0;cursor:pointer}button:disabled{opacity:.4;cursor:default}.secondary{background:#fff}.danger{color:#a23b34}.muted{color:#756e59;font-size:14px}pre{white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;font-size:13px}table{border-collapse:collapse;width:100%}td,th{padding:8px;text-align:left;border-bottom:1px solid #e7dfae}#result{font-weight:700}input{max-width:100%}strong{font-weight:800}</style></head>
+<body><main>
+<h1>🛟 實習時數資料救援</h1>
+<p>這個頁面和你的時數網站位於<strong>同一個網域</strong>。它只讀取 Safari 目前仍可讀取的紀錄，不會清除、覆蓋或自動合併任何資料，也不會把資料上傳到伺服器。</p>
+<div class="panel"><strong>第一步：檢查殘留資料</strong><p id="status">準備檢查…</p><button id="scan">重新檢查</button><button id="export" disabled>下載找到的原始資料（JSON）</button><div id="result"></div><div id="sources"></div></div>
+<div class="panel"><strong>第二步：從找到的紀錄製作恢復連結</strong><p>如果找到九月至十一月的紀錄，先下載備份，再按下方按鈕。恢復連結會在這台 Safari 開啟原本的時數網站，使用修復後的分享連結匯入功能。</p><button id="restore" disabled>開啟恢復連結</button><button id="copy" disabled class="secondary">複製恢復連結</button><p class="muted">恢復連結可能很長，請勿公開含有私人備註的連結。</p></div>
+<div class="panel"><strong>找不到紀錄時</strong><p>若這裡顯示 0 筆，代表目前網站可讀取的 localStorage 和已知備份中沒有找到紀錄，<strong>不等於 56.6 KB 全是空的</strong>；Safari 的網站資料包含其他內容，網頁無法直接讀取 iOS 已清除的資料。</p><p>接著請找舊的 <code>#data=</code> 分享連結。可以把完整連結貼在下方，在本機解碼，不會上傳。</p><textarea id="oldlink" rows="3" style="width:100%;border:1px solid #c9bb82;border-radius:10px;padding:10px" placeholder="貼上過去儲存的完整分享網址"></textarea><button id="decode" class="secondary">檢查舊分享連結</button><p id="linkResult" class="muted"></p></div>
+<p class="muted">安全提醒：請勿清除 Safari 歷史紀錄與網站資料、刪除主畫面網站捷徑或使用清理工具。救援結果只在本機顯示。</p>
+<a class="link secondary" href="./">返回時數網站</a>
+</main><script>
+(()=>{
+const KEY="study-hours-records-v1", BACKUP="study-hours-records-recovery-backup-v1";
+const $=id=>document.getElementById(id);
+let entries=[], rawItems=[], shareUrl="";
+const clean=a=>Array.isArray(a)?a.filter(r=>r && /^\d{4}-\d{2}-\d{2}$/.test(String(r.date||"")) && Number.isFinite(Number(r.hours)) && Number(r.hours)>0).map(r=>({id:String(r.id||""),date:String(r.date),hours:Number(r.hours),note:String(r.note||"")})):[];
+function combine(groups){const out=[],seen=new Set(); for(const group of groups)for(const r of clean(group)){const k=r.id? "id:"+r.id:"content:"+JSON.stringify([r.date,r.hours,r.note]);const c=JSON.stringify([r.date,r.hours,r.note]);if(seen.has(k)||seen.has("content:"+c))continue;seen.add(k);seen.add("content:"+c);out.push(r)}return out.sort((a,b)=>b.date.localeCompare(a.date))}
+function listSources(){return rawItems.filter(x=>x.records.length).map(x=>x.source+"："+x.records.length+" 筆").join("；")||"沒有找到可用的時數紀錄"}
+function prepare(a){entries=combine(a);shareUrl=entries.length&&window.LZString?location.origin+location.pathname.replace(/rescue\.html$/,"")+"#data="+LZString.compressToEncodedURIComponent(JSON.stringify({v:1,goal:320,records:entries})):"";$("restore").disabled=!shareUrl;$("copy").disabled=!shareUrl;$("export").disabled=!rawItems.length}
+function scan(){
+rawItems=[]; let keys=[],error="";
+try{for(let i=0;i<localStorage.length;i++) keys.push(localStorage.key(i));}catch(e){error=e.message}
+for(const key of keys){
+let raw;try{raw=localStorage.getItem(key)}catch(e){continue}
+if(raw==null)continue;
+if(key===KEY||key===BACKUP||/hours|record|backup|internship|study/i.test(key)){
+let obj;try{obj=JSON.parse(raw)}catch{continue}
+if(key===BACKUP && Array.isArray(obj)){for(let i=0;i<obj.length;i++)rawItems.push({source:key+" / 備份 "+(i+1),records:clean(obj[i]?.records)})}
+else if(Array.isArray(obj)) rawItems.push({source:key,records:clean(obj)});
+else if(obj&&Array.isArray(obj.records))rawItems.push({source:key,records:clean(obj.records)});
+}
+}
+prepare(rawItems.map(x=>x.records));
+$("status").textContent=error?"Safari 阻止讀取："+error:"檢查完成。";
+$("result").textContent="找到 "+entries.length+" 筆不重複紀錄，累積 "+entries.reduce((s,r)=>s+r.hours,0).toFixed(1).replace(/\.0$/,"")+" 小時。";
+$("sources").textContent="來源："+listSources();
+if(entries.length){const t=document.createElement("table"),h=document.createElement("tr");for(const x of ["日期","小時","備註"]){const th=document.createElement("th");th.textContent=x;h.append(th)}t.append(h);for(const r of entries.slice(0,100)){const tr=document.createElement("tr");for(const x of [r.date,r.hours,r.note]){const td=document.createElement("td");td.textContent=x;tr.append(td)}t.append(tr)}$("sources").append(t)}
+}
+function download(){
+const payload={exportedAt:new Date().toISOString(),origin:location.origin,matchedSources:rawItems,combinedRecords:entries};
+const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="實習時數-救援備份-"+new Date().toISOString().slice(0,10)+".json";document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000)
+}
+$("scan").onclick=scan;$("export").onclick=download;
+$("restore").onclick=()=>{if(shareUrl)location.href=shareUrl};
+$("copy").onclick=async()=>{if(!shareUrl)return;try{await navigator.clipboard.writeText(shareUrl);alert("已複製恢復連結")}catch{prompt("請複製完整連結",shareUrl)}};
+$("decode").onclick=()=>{
+const input=$("oldlink").value.trim();const match=input.match(/[#&]data=([^&]+)/);
+if(!match){$("linkResult").textContent="找不到 #data=；請貼上完整分享網址。";return}
+try{const str=LZString.decompressFromEncodedURIComponent(match[1]);const obj=JSON.parse(str);const rec=clean(obj.records);if(!rec.length){$("linkResult").textContent="已解析，但這條連結沒有有效紀錄。";return}
+rawItems.push({source:"手動貼上的舊分享連結",records:rec});prepare(rawItems.map(x=>x.records));
+$("linkResult").textContent="成功找到 "+rec.length+" 筆！目前合併 "+entries.length+" 筆。請先下載原始資料，再使用恢復連結。";$("result").textContent="找到 "+entries.length+" 筆不重複紀錄。";$("sources").textContent="來源："+listSources()
+}catch(e){$("linkResult").textContent="連結解碼失敗："+e.message}
+};
+scan();
+})();
+</script></body></html>

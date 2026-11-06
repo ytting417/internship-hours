@@ -214,6 +214,7 @@
 (() => {
   const GOAL = 320;
   const STORAGE_KEY = "study-hours-records-v1";
+  const BACKUP_KEY = "study-hours-records-recovery-backup-v1";
   let records = [];
 
   const $ = id => document.getElementById(id);
@@ -223,6 +224,21 @@
   }
 
   function save() {
+    // Never overwrite an existing copy without preserving its previous contents.
+    const previous = localStorage.getItem(STORAGE_KEY);
+    if (previous !== null) {
+      try {
+        const backups = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
+        const previousData = JSON.parse(previous);
+        if (Array.isArray(previousData) && previous !== JSON.stringify(records)) {
+          backups.push({savedAt: new Date().toISOString(), records: previousData});
+          localStorage.setItem(BACKUP_KEY, JSON.stringify(backups.slice(-30)));
+        }
+      } catch (error) {
+        console.warn("Could not create recovery backup", error);
+        throw error;
+      }
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
   }
 
@@ -263,7 +279,7 @@
   }
 
   function loadFromHash() {
-    const match = location.hash.match(/(?:^|&)data=([^&]*)/);
+    const match = location.hash.match(/(?:^#|&)data=([^&]*)/);
     if (!match) return null;
     return decodeShareData(match[1]);
   }
@@ -468,10 +484,31 @@
     }
   });
 
-  // On first load, shared hash data takes priority over local data.
+  // A share link must never silently replace local records. Merge by record ID
+  // and preserve distinct same-day entries; all prior local data stays intact.
+  const local = cleanRecords(loadLocal());
   const shared = loadFromHash();
-  records = shared !== null ? shared : cleanRecords(loadLocal());
-  if (shared !== null) save();
+  if (shared !== null) {
+    const merged = new Map(local.map(r => [r.id, r]));
+    for (const r of shared) {
+      if (!merged.has(r.id)) {
+        const existing = local.some(x =>
+          x.date === r.date && x.hours === r.hours && x.note === r.note);
+        if (!existing) merged.set(r.id, r);
+      }
+    }
+    records = Array.from(merged.values()).sort((a,b) => b.date.localeCompare(a.date));
+    if (records.length !== local.length) {
+      try {
+        save();
+      } catch (error) {
+        console.error("Unable to save imported records:", error);
+        alert("分享資料已讀取，但無法儲存到瀏覽器，請先複製分享連結備份。");
+      }
+    }
+  } else {
+    records = local;
+  }
 
   $("date").value = new Date().toISOString().slice(0,10);
   render();
